@@ -180,3 +180,12 @@ go test ./internal/analytics/... -v
 | `TestResponseRate` | Охват опроса = участники / штат Delivery |
 | `TestBuildSegmentBreakdown` | Срезы вовлечённости по direction/grade/… |
 | `TestBuildEnpsSegmentBreakdown` | Срезы eNPS по группам Delivery |
+
+### Группа 4: recommendations (`recommendations_test.go`)
+
+| Тест | Что проверяет |
+|------|----------------|
+| `TestEngagementBand` | Пороги «сильная / внимание / критическая» зона |
+| `TestBuildRecommendations_empty` | Заглушка при отсутствии измерений |
+| `TestBuildRecommendations_withData` | Общие и dimension-рекомендации |
+| `TestRecommendationsSummary` | Краткий список для дашборда |
