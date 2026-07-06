@@ -30,6 +30,7 @@ def main() -> int:
     lines = [
         "BEGIN TRANSACTION;",
         "DELETE FROM delivery_org_options;",
+        "DELETE FROM delivery_org_option_scopes;",
         "DELETE FROM delivery_context_stats;",
         "DELETE FROM delivery_sync_meta;",
     ]
@@ -44,6 +45,18 @@ def main() -> int:
         vals = ", ".join(sql_literal(row[k]) for k in row.keys())
         lines.append(
             f"INSERT INTO delivery_org_options (option_type, option_value, label_ru, employee_count, sort_order) VALUES ({vals});"
+        )
+
+    for row in cur.execute(
+        """
+        SELECT option_type, option_value, scope_type, scope_value, employee_count
+        FROM delivery_org_option_scopes
+        ORDER BY scope_type, scope_value, option_type, option_value
+        """
+    ):
+        vals = ", ".join(sql_literal(row[k]) for k in row.keys())
+        lines.append(
+            f"INSERT INTO delivery_org_option_scopes (option_type, option_value, scope_type, scope_value, employee_count) VALUES ({vals});"
         )
 
     for row in cur.execute(
@@ -71,7 +84,7 @@ def main() -> int:
 
     lines.append("COMMIT;")
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"Exported {len(lines) - 5} rows to {out}")
+    print(f"Exported {len(lines) - 6} rows to {out}")
     conn.close()
     return 0
 

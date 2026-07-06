@@ -24,9 +24,17 @@ type Question struct {
 }
 
 type SurveyCurrentResponse struct {
-	Round      SurveyRound       `json:"round"`
-	Questions  []Question        `json:"questions"`
-	OrgOptions []OrgOptionGroup  `json:"orgOptions,omitempty"`
+	Round           SurveyRound      `json:"round"`
+	Questions       []Question       `json:"questions"`
+	OrgOptions      []OrgOptionGroup `json:"orgOptions,omitempty"`
+	OrgOptionScopes []OrgOptionScope `json:"orgOptionScopes,omitempty"`
+}
+
+type OrgOptionScope struct {
+	OptionType  string `json:"optionType"`
+	OptionValue string `json:"optionValue"`
+	ScopeType   string `json:"scopeType"`
+	ScopeValue  string `json:"scopeValue"`
 }
 
 type OrgOptionGroup struct {

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { Loader2 } from 'lucide-react';
-import { fetchCurrentSurvey, submitSurvey, type OrgOptionGroup, type Question } from '../lib/api';
+import { fetchCurrentSurvey, submitSurvey, type OrgOptionGroup, type OrgOptionScope, type Question } from '../lib/api';
 
 const METADATA_FIELD: Record<string, keyof SurveyMetadata> = {
   direction: 'direction',
@@ -132,6 +132,29 @@ function QuestionScale({
   );
 }
 
+const SCOPED_OPTION_TYPES = new Set(['position', 'grade_band']);
+
+function optionsForGroup(
+  group: OrgOptionGroup,
+  direction: string,
+  scopes: OrgOptionScope[],
+): OrgOptionGroup['options'] {
+  if (!SCOPED_OPTION_TYPES.has(group.type)) {
+    return group.options;
+  }
+  if (!direction) {
+    return [];
+  }
+  const scoped = scopes.filter(
+    (s) => s.optionType === group.type && s.scopeType === 'direction' && s.scopeValue === direction,
+  );
+  if (scoped.length === 0) {
+    return group.options;
+  }
+  const allowed = new Set(scoped.map((s) => s.optionValue));
+  return group.options.filter((opt) => allowed.has(opt.value) || opt.value === 'Другое');
+}
+
 export const SurveyPage = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -140,6 +163,7 @@ export const SurveyPage = () => {
   const [roundCode, setRoundCode] = useState('');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [orgOptions, setOrgOptions] = useState<OrgOptionGroup[]>([]);
+  const [orgOptionScopes, setOrgOptionScopes] = useState<OrgOptionScope[]>([]);
   const [answers, setAnswers] = useState<Record<string, number | null>>({});
   const [metadata, setMetadata] = useState<SurveyMetadata>(emptyMetadata());
 
@@ -149,6 +173,7 @@ export const SurveyPage = () => {
         setRoundCode(data.round.code);
         setQuestions(data.questions);
         setOrgOptions(data.orgOptions ?? []);
+        setOrgOptionScopes(data.orgOptionScopes ?? []);
         setLoading(false);
       })
       .catch(() => {
@@ -164,7 +189,14 @@ export const SurveyPage = () => {
   const handleMetadata = (type: string, value: string) => {
     const field = METADATA_FIELD[type];
     if (!field) return;
-    setMetadata((prev) => ({ ...prev, [field]: value }));
+    setMetadata((prev) => {
+      const next = { ...prev, [field]: value };
+      if (type === 'direction') {
+        next.positionGroup = '';
+        next.gradeBand = '';
+      }
+      return next;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -259,7 +291,8 @@ export const SurveyPage = () => {
           <div className="card space-y-4">
             <h2 className="text-xl font-semibold mb-4">О вас (необязательно)</h2>
             <p className="text-sm text-ink-muted mb-4">
-              Справочник синхронизирован с Delivery Sapiens. Данные используются только в агрегированных срезах.
+              Справочник синхронизирован с Delivery Sapiens. После выбора направления список должностей и грейдов
+              сужается по данным Delivery. Данные используются только в агрегированных срезах.
             </p>
 
             <div className="grid sm:grid-cols-2 gap-4">
@@ -267,19 +300,24 @@ export const SurveyPage = () => {
                 const field = METADATA_FIELD[group.type];
                 if (!field) return null;
                 const current = metadata[field];
+                const options = optionsForGroup(group, metadata.direction, orgOptionScopes);
+                const needsDirection = SCOPED_OPTION_TYPES.has(group.type);
+                const disabled = needsDirection && !metadata.direction;
                 return (
                   <div key={group.type}>
                     <label className="block text-sm font-medium mb-1">{group.labelRu}</label>
                     <select
-                      className="w-full bg-white border border-line rounded py-2 px-3 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                      className="w-full bg-white border border-line rounded py-2 px-3 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand disabled:opacity-60"
                       value={current}
+                      disabled={disabled}
                       onChange={(e) => handleMetadata(group.type, e.target.value)}
                     >
-                      <option value="">Не указывать</option>
-                      {group.options.map((opt) => (
+                      <option value="">
+                        {disabled ? 'Сначала выберите направление' : 'Не указывать'}
+                      </option>
+                      {options.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.labelRu}
-                          {opt.employeeCount ? ` (${opt.employeeCount})` : ''}
                         </option>
                       ))}
                     </select>

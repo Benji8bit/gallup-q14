@@ -31,10 +31,18 @@ export interface OrgOptionGroup {
   options: OrgOption[];
 }
 
+export interface OrgOptionScope {
+  optionType: string;
+  optionValue: string;
+  scopeType: string;
+  scopeValue: string;
+}
+
 export interface SurveyCurrentResponse {
   round: SurveyRound;
   questions: Question[];
   orgOptions?: OrgOptionGroup[];
+  orgOptionScopes?: OrgOptionScope[];
 }
 
 export interface DimensionScore {

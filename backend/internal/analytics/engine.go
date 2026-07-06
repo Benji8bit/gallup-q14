@@ -219,7 +219,10 @@ func (e *Engine) BuildDashboard(input BuildInput) models.DashboardResponse {
 
 	expected := 0
 	if input.DeliveryMeta != nil {
-		expected = input.DeliveryMeta.StaffTotal
+		expected = input.DeliveryMeta.ActiveDeliveryQTD
+		if expected <= 0 {
+			expected = input.DeliveryMeta.StaffTotal
+		}
 	}
 	respRate := responseRate(input.CurrentRoundSubmissions, expected)
 

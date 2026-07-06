@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Sync Delivery Sapiens reference data into gallup-q14 SQLite (no PII stored).
 
-Org options mirror ods.employee structure: all directions, positions, grades, and
-employee types. Grades are stored as-is from Delivery (not collapsed to Junior/Lead bands).
-Tenure is derived from date_from into three survey buckets.
+Org options mirror ods.employee structure with active-in-quarter counts (distinct email,
+mandays > 0 in current quarter). Position and grade lists cascade by employee_direction
+via delivery_org_option_scopes.
 """
 from __future__ import annotations
 
@@ -86,48 +86,91 @@ def fetch_pg_rows(conn) -> dict:
     months = quarter_months()
     months_sql = ", ".join(f"'{m}'" for m in months)
 
-    cur.execute(
+    active_from = f"""
+        WITH active_emails AS (
+            SELECT DISTINCT lower(email) AS email
+            FROM vdm_query.v_data_mart_without_total
+            WHERE calmonth IN ({months_sql}) AND mandays::numeric > 0
+        )
+    """
+
+    def active_count(sql_body: str) -> list:
+        cur.execute(active_from + sql_body)
+        return cur.fetchall()
+
+    directions = active_count(
         """
-        SELECT employee_direction AS value, COUNT(*) AS cnt
-        FROM ods.employee
-        WHERE employee_direction IS NOT NULL AND TRIM(employee_direction) <> ''
+        SELECT e.employee_direction AS value, COUNT(DISTINCT e.email) AS cnt
+        FROM ods.employee e
+        INNER JOIN active_emails a ON lower(e.email) = a.email
+        WHERE e.employee_direction IS NOT NULL AND TRIM(e.employee_direction) <> ''
         GROUP BY 1 ORDER BY 2 DESC
         """
     )
-    directions = cur.fetchall()
 
-    cur.execute(
+    positions = active_count(
         """
-        SELECT position AS value, COUNT(*) AS cnt
-        FROM ods.employee
-        WHERE position IS NOT NULL AND TRIM(position) <> ''
+        SELECT e.position AS value, COUNT(DISTINCT e.email) AS cnt
+        FROM ods.employee e
+        INNER JOIN active_emails a ON lower(e.email) = a.email
+        WHERE e.position IS NOT NULL AND TRIM(e.position) <> ''
         GROUP BY 1 ORDER BY 2 DESC, 1 ASC
         """
     )
-    positions = cur.fetchall()
 
-    cur.execute(
+    grades = active_count(
         """
-        SELECT TRIM(grade) AS value, COUNT(*) AS cnt
-        FROM ods.employee
-        WHERE grade IS NOT NULL AND TRIM(grade) <> '' AND TRIM(grade) <> '-'
+        SELECT TRIM(e.grade) AS value, COUNT(DISTINCT e.email) AS cnt
+        FROM ods.employee e
+        INNER JOIN active_emails a ON lower(e.email) = a.email
+        WHERE e.grade IS NOT NULL AND TRIM(e.grade) <> '' AND TRIM(e.grade) <> '-'
         GROUP BY 1 ORDER BY 2 DESC, 1 ASC
         """
     )
-    grades = cur.fetchall()
 
-    cur.execute(
+    employee_types = active_count(
         """
-        SELECT employee_type AS value, COUNT(*) AS cnt
-        FROM ods.employee
-        WHERE employee_type IS NOT NULL AND TRIM(employee_type) <> ''
+        SELECT e.employee_type AS value, COUNT(DISTINCT e.email) AS cnt
+        FROM ods.employee e
+        INNER JOIN active_emails a ON lower(e.email) = a.email
+        WHERE e.employee_type IS NOT NULL AND TRIM(e.employee_type) <> ''
         GROUP BY 1 ORDER BY 2 DESC
         """
     )
-    employee_types = cur.fetchall()
 
-    cur.execute("SELECT date_from FROM ods.employee")
+    position_by_direction = active_count(
+        """
+        SELECT e.employee_direction AS scope_value, e.position AS option_value,
+               COUNT(DISTINCT e.email) AS cnt
+        FROM ods.employee e
+        INNER JOIN active_emails a ON lower(e.email) = a.email
+        WHERE e.employee_direction IS NOT NULL AND TRIM(e.employee_direction) <> ''
+          AND e.position IS NOT NULL AND TRIM(e.position) <> ''
+        GROUP BY 1, 2 ORDER BY 1, 3 DESC, 2 ASC
+        """
+    )
+
+    grade_by_direction = active_count(
+        """
+        SELECT e.employee_direction AS scope_value, TRIM(e.grade) AS option_value,
+               COUNT(DISTINCT e.email) AS cnt
+        FROM ods.employee e
+        INNER JOIN active_emails a ON lower(e.email) = a.email
+        WHERE e.employee_direction IS NOT NULL AND TRIM(e.employee_direction) <> ''
+          AND e.grade IS NOT NULL AND TRIM(e.grade) <> '' AND TRIM(e.grade) <> '-'
+        GROUP BY 1, 2 ORDER BY 1, 3 DESC, 2 ASC
+        """
+    )
+
     tenure_counts: dict[str, int] = {}
+    cur.execute(
+        f"""
+        {active_from}
+        SELECT e.date_from
+        FROM ods.employee e
+        INNER JOIN active_emails a ON lower(e.email) = a.email
+        """
+    )
     for row in cur.fetchall():
         tb = tenure_band(row["date_from"])
         if tb:
@@ -165,21 +208,23 @@ def fetch_pg_rows(conn) -> dict:
     )
     load_bands = cur.fetchall()
 
-    cur.execute(
+    direction_headcount = active_count(
         """
-        SELECT employee_direction AS direction, COUNT(DISTINCT email) AS people
-        FROM ods.employee
-        WHERE employee_direction IS NOT NULL AND TRIM(employee_direction) <> ''
+        SELECT e.employee_direction AS direction, COUNT(DISTINCT e.email) AS people
+        FROM ods.employee e
+        INNER JOIN active_emails a ON lower(e.email) = a.email
+        WHERE e.employee_direction IS NOT NULL AND TRIM(e.employee_direction) <> ''
         GROUP BY 1 ORDER BY 2 DESC
         """
     )
-    direction_headcount = cur.fetchall()
 
     return {
         "directions": directions,
         "positions": positions,
         "grades": grades,
         "employee_types": employee_types,
+        "position_by_direction": position_by_direction,
+        "grade_by_direction": grade_by_direction,
         "tenure_counts": tenure_counts,
         "staff_total": staff_total,
         "active_delivery": active_delivery,
@@ -193,6 +238,7 @@ def write_sqlite(db_path: Path, data: dict) -> None:
     cur = conn.cursor()
 
     cur.execute("DELETE FROM delivery_org_options")
+    cur.execute("DELETE FROM delivery_org_option_scopes")
     cur.execute("DELETE FROM delivery_context_stats")
 
     sort = 0
@@ -258,6 +304,26 @@ def write_sqlite(db_path: Path, data: dict) -> None:
             VALUES ('employee_type', ?, ?, ?, ?)
             """,
             (value, employee_type_label(value), row["cnt"], sort),
+        )
+
+    for row in data["position_by_direction"]:
+        cur.execute(
+            """
+            INSERT INTO delivery_org_option_scopes
+                (option_type, option_value, scope_type, scope_value, employee_count)
+            VALUES ('position', ?, 'direction', ?, ?)
+            """,
+            (row["option_value"], row["scope_value"], row["cnt"]),
+        )
+
+    for row in data["grade_by_direction"]:
+        cur.execute(
+            """
+            INSERT INTO delivery_org_option_scopes
+                (option_type, option_value, scope_type, scope_value, employee_count)
+            VALUES ('grade_band', ?, 'direction', ?, ?)
+            """,
+            (row["option_value"], row["scope_value"], row["cnt"]),
         )
 
     for row in data["load_bands"]:

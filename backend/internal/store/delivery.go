@@ -69,6 +69,29 @@ func (s *Store) GetOrgOptions(ctx context.Context) ([]models.OrgOptionGroup, err
 	return out, nil
 }
 
+func (s *Store) GetOrgOptionScopes(ctx context.Context) ([]models.OrgOptionScope, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT option_type, option_value, scope_type, scope_value
+		FROM delivery_org_option_scopes
+		WHERE employee_count > 0
+		ORDER BY scope_type, scope_value, option_type, option_value
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query org option scopes: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]models.OrgOptionScope, 0, 256)
+	for rows.Next() {
+		var scope models.OrgOptionScope
+		if err := rows.Scan(&scope.OptionType, &scope.OptionValue, &scope.ScopeType, &scope.ScopeValue); err != nil {
+			return nil, fmt.Errorf("scan org option scope: %w", err)
+		}
+		out = append(out, scope)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) GetDeliverySyncMeta(ctx context.Context) (*models.DeliverySyncMeta, error) {
 	var meta models.DeliverySyncMeta
 	var syncedAt string

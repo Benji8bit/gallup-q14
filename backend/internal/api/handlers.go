@@ -69,10 +69,17 @@ func (h *Handler) currentSurvey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scopes, err := h.store.GetOrgOptionScopes(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Не удалось получить справочники"})
+		return
+	}
+
 	writeJSON(w, http.StatusOK, models.SurveyCurrentResponse{
-		Round:      round,
-		Questions:  questions,
-		OrgOptions: orgOptions,
+		Round:           round,
+		Questions:       questions,
+		OrgOptions:      orgOptions,
+		OrgOptionScopes: scopes,
 	})
 }
 
