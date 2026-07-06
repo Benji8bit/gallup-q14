@@ -163,3 +163,12 @@ go test ./internal/analytics/... -v
 | `TestBuildEnpsScore` | Формула eNPS = % промоутеров − % критиков |
 | `TestEnpsScoreModel` | Маппинг в `models.EnpsScore` |
 | `TestEnpsTrendModel` | Точка тренда по кварталу |
+
+### Группа 2: engine (`engine_test.go`)
+
+| Тест | Что проверяет |
+|------|----------------|
+| `TestPct` / `TestAvg` | Вспомогательные расчёты процентов и среднего |
+| `TestMapSixToFive` | Пересчёт legacy-шкалы 1–6 в 1–5 |
+| `TestBuildDashboard_empty` | Пустой ввод: заглушки измерений и рекомендаций |
+| `TestBuildDashboard_engagementAndEnps` | Сводный KPI, eNPS, тренды, охват Delivery |
