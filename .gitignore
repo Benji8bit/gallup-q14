@@ -1,0 +1,46 @@
+# Backend
+backend/data/
+backend/bin/
+*.db
+
+# Deploy staging / build artifacts
+dist/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Env
+.env
+
+# Delivery reference snapshot (manual seed for VPS; regenerate locally)
+scripts/delivery_reference_seed.sql
+
+# Local discovery output (may contain internal connection metadata)
+scripts/delivery_discovery_output.json
+
+# Internal docs (local only; not published in public repo)
+docs/01-overview.md
+docs/03-methodology.md
+docs/04-api.md
+docs/05-architecture.md
+docs/07-development-log.md
+docs/08-leadership-tz-2026-07.md
+docs/09-deployment-interxion.md
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.exe
+
+# Go
+*.test
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
