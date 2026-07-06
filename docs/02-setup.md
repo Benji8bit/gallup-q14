@@ -172,3 +172,11 @@ go test ./internal/analytics/... -v
 | `TestMapSixToFive` | Пересчёт legacy-шкалы 1–6 в 1–5 |
 | `TestBuildDashboard_empty` | Пустой ввод: заглушки измерений и рекомендаций |
 | `TestBuildDashboard_engagementAndEnps` | Сводный KPI, eNPS, тренды, охват Delivery |
+
+### Группа 3: segments (`segments_test.go`)
+
+| Тест | Что проверяет |
+|------|----------------|
+| `TestResponseRate` | Охват опроса = участники / штат Delivery |
+| `TestBuildSegmentBreakdown` | Срезы вовлечённости по direction/grade/… |
+| `TestBuildEnpsSegmentBreakdown` | Срезы eNPS по группам Delivery |
