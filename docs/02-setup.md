@@ -144,3 +144,22 @@ $env:PORT = "8081"
 ```
 
 И обновите proxy в `frontend/vite.config.ts`.
+
+## Тесты backend
+
+Пакет `backend/internal/analytics` — unit-тесты расчётов дашборда. Требуется Go 1.20+ (полный `go test ./...` — Go 1.22+ из-за зависимости SQLite).
+
+```powershell
+cd backend
+go test ./internal/analytics/... -v
+```
+
+### Группа 1: scoring (`scoring_test.go`)
+
+| Тест | Что проверяет |
+|------|----------------|
+| `TestBuildScoreContext_*` | Роли вопросов (Q00/eNPS/engagement), шкала 1–5, legacy 1–6 |
+| `TestClassifyEnps` | Сегменты eNPS: промоутер / нейтрал / критик |
+| `TestBuildEnpsScore` | Формула eNPS = % промоутеров − % критиков |
+| `TestEnpsScoreModel` | Маппинг в `models.EnpsScore` |
+| `TestEnpsTrendModel` | Точка тренда по кварталу |
