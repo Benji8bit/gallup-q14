@@ -10,12 +10,12 @@ func StartPeriodicSync(dbPath string, interval time.Duration, logger *log.Logger
 		logger.Printf("delivery periodic sync disabled (interval <= 0)")
 		return
 	}
-	if !CredentialsConfigured() {
-		logger.Printf("delivery periodic sync disabled: DELIVERY_SAPIENS_DB_PASSWORD not set")
+	if !MirrorAvailable() {
+		logger.Printf("delivery periodic sync disabled: local mirror not found (%s)", resolveMirrorPath())
 		return
 	}
 
-	logger.Printf("delivery periodic sync enabled: every %s", interval)
+	logger.Printf("delivery periodic sync enabled: every %s (from local mirror)", interval)
 
 	go func() {
 		run := func() {

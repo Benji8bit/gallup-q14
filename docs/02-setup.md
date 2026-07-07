@@ -145,6 +145,76 @@ $env:PORT = "8081"
 
 И обновите proxy в `frontend/vite.config.ts`.
 
+## Локальная копия Delivery (без VPN)
+
+Справочники Delivery хранятся **офлайн** в SQLite-файле. PostgreSQL нужен только при **ежемесячном** обновлении зеркала (корпоративный VPN).
+
+| Файл | Назначение | В git |
+|------|------------|-------|
+| `backend/data/delivery_mirror.db` | Снимок `v_employee`, `employee`, data mart (квартал) | **нет** |
+| `backend/data/gallup-q14.db` | БД приложения (опрос, справочники, ответы) | **нет** |
+| `scripts/delivery_reference_seed.sql` | SQL для VPS после sync | **нет** |
+
+### Таблицы зеркала
+
+| Таблица | Содержимое |
+|---------|------------|
+| `mirror_meta` | Дата pull, хост-источник, квартал, счётчики строк |
+| `mirror_v_employee` | Снимок `ods.v_employee` |
+| `mirror_employee` | Снимок `ods.employee` |
+| `mirror_data_mart` | Mandays за текущий квартал |
+
+> В зеркале есть **email** (служебно, для join). В git не коммитить.
+
+### Скрипты
+
+| Скрипт | VPN | Действие |
+|--------|-----|----------|
+| `pull_delivery_mirror.py` | **да** (рабочая машина) | PostgreSQL → локальный `delivery_mirror.db` |
+| `upload-mirror-to-vps.ps1` | нет | зеркало → VPS + sync на сервере |
+| `sync_delivery_reference.py` | нет | зеркало → `gallup-q14.db` (на той же машине) |
+| `vps-sync-from-mirror.sh` | нет | **на VPS:** зеркало → app DB |
+| `export_delivery_reference_sql.py` | нет | seed для VPS |
+| `delivery-monthly-sync.ps1` | да | pull + sync + export |
+| `register-delivery-monthly-task.ps1` | — | задача Windows (1-е число, 08:00) |
+
+```powershell
+pip install psycopg2-binary
+
+# Раз в месяц (VPN)
+powershell -File scripts/delivery-monthly-sync.ps1
+
+# Без VPN — пересборка справочника из уже скачанного зеркала
+python scripts/sync_delivery_reference.py
+```
+
+Переменные: см. `.env.example` (`DELIVERY_MIRROR_PATH`, `DELIVERY_SAPIENS_DB_*`, `DELIVERY_SYNC_INTERVAL_HOURS`).
+
+### DBeaver
+
+Подключения добавлены в workspace DBeaver (`General/.dbeaver/data-sources.json`):
+
+| Имя в DBeaver | Путь |
+|---------------|------|
+| **Delivery Mirror (Gallup Q14 local)** | `C:/Work/gallup_q14/backend/data/delivery_mirror.db` |
+| **Gallup Q14 app (local)** | `C:/Work/gallup_q14/backend/data/gallup-q14.db` |
+
+После правки `data-sources.json` перезапустите DBeaver или **Database → Refresh**.
+
+Примеры запросов: `scripts/gallup_delivery_mirror_queries.sql` (копия также в `General/Scripts/gallup_q14_delivery_mirror.sql` в DBeaver).
+
+### Первый pull
+
+Если `delivery_mirror.db` ещё нет:
+
+```powershell
+$env:DELIVERY_SAPIENS_DB_HOST = "<delivery-host>"   # или User env
+python scripts/pull_delivery_mirror.py
+python scripts/sync_delivery_reference.py
+```
+
+Без зеркала кнопка **Delivery** на дашборде и `sync_delivery_reference.py` завершатся ошибкой.
+
 ## Тесты backend
 
 Пакет `backend/internal/analytics` — unit-тесты расчётов дашборда. Требуется Go 1.20+ (полный `go test ./...` — Go 1.22+ из-за зависимости SQLite).

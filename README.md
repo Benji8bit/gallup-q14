@@ -97,70 +97,80 @@ go run ./cmd/server
 
 ## Интеграция с Delivery Sapiens
 
-Платформа подтягивает **оргструктуру и контекст нагрузки** из корпоративной PostgreSQL-базы Delivery Sapiens (read-only). В SQLite сохраняются только **агрегаты и справочники** — без email и ФИО.
+Платформа использует **локальную копию** справочников Delivery Sapiens (`backend/data/delivery_mirror.db`). В PostgreSQL ходит только **ежемесячное обновление** зеркала (нужен VPN); повседневная работа и кнопка **Delivery** на дашборде читают **только локальный файл**.
 
-### Что синхронизируется
+**DBeaver (без VPN):** подключения `Delivery Mirror (Gallup Q14 local)` и `Gallup Q14 app (local)` — SQLite. Подробнее: [docs/02-setup.md](docs/02-setup.md#локальная-копия-delivery-без-vpn). Пример SQL: [scripts/gallup_delivery_mirror_queries.sql](scripts/gallup_delivery_mirror_queries.sql).
 
-| Источник (Delivery) | Назначение в Gallup Q14 |
-|---------------------|-------------------------|
-| `ods.employee` | Направления, должности, грейды, тип занятости, стаж |
-| `vdm_query.v_data_mart_without_total` | Ожидаемый охват, band нагрузки (mandays) |
+### Что хранится в зеркале
 
-Справочники используются в **форме опроса** (выпадающие списки) и на **HR-дашборде** (охват, срезы по группам, контекст Delivery).
+| Таблица-источник (Delivery) | Локальная таблица | Назначение |
+|-------------------------------|-------------------|------------|
+| `ods.v_employee` + `ods.employee` | `mirror_v_employee`, `mirror_employee` | Штат компании, оргполя формы |
+| `vdm_query.v_data_mart_without_total` (текущий квартал) | `mirror_data_mart` | Delivery-активность, band нагрузки |
+
+В SQLite приложения сохраняются только **агрегаты и справочники** — без email и ФИО.
 
 ### Переменные окружения
 
-Задайте в системных переменных Windows (или в `.env` при локальном запуске):
+| Переменная | Описание | Когда нужна |
+|------------|----------|-------------|
+| `DELIVERY_MIRROR_PATH` | Путь к зеркалу (опционально) | По умолчанию `backend/data/delivery_mirror.db` |
+| `DELIVERY_SAPIENS_DB_*` | PostgreSQL Delivery | **Только** `pull_delivery_mirror.py` (VPN) |
+| `DELIVERY_SYNC_INTERVAL_HOURS` | Пересборка справочника из зеркала, ч; `0` = выкл. | Backend (без VPN) |
 
-| Переменная | Описание | Пример |
-|------------|----------|--------|
-| `DELIVERY_SAPIENS_DB_USER` | Пользователь PostgreSQL | `<db-user>` |
-| `DELIVERY_SAPIENS_DB_PASSWORD` | Пароль | *(секрет)* |
-| `DELIVERY_SAPIENS_DB_HOST` | Хост (опционально) | `<delivery-host>` |
-| `DELIVERY_SAPIENS_DB_PORT` | Порт (опционально) | `5432` |
-| `DELIVERY_SAPIENS_DB_NAME` | База (опционально) | `postgres` |
-| `DELIVERY_SYNC_INTERVAL_HOURS` | Интервал авто-синхронизации, часы; `0` = выкл. | `24` |
+Требуется **Python 3**; для pull — `pip install psycopg2-binary`.
 
-Требуется **Python 3** и пакет `psycopg2-binary` для скрипта синхронизации.
+### Ежемесячное обновление зеркала (VPN)
 
-### Ручная синхронизация
+**Pilot (VPS):** зеркало живёт **на сервере** (`/opt/gallup-q14/data/delivery_mirror.db`). Backend и кнопка Delivery читают его локально — доступ снаружи не нужен.
+
+Обновление зеркала из PostgreSQL делается **с рабочей машины в VPN**, затем файл заливается на VPS (`INTERXION_SWI_*` в user env, см. внутренний runbook):
 
 ```powershell
-pip install psycopg2-binary
+powershell -File scripts/delivery-monthly-sync.ps1
+# pull → local mirror → sync → export → upload mirror.db → sync on VPS
+```
+
+Или только upload уже скачанного зеркала:
+
+```powershell
+powershell -File scripts/upload-mirror-to-vps.ps1
+```
+
+**Локальная разработка:** то же зеркало в `backend/data/delivery_mirror.db` (не коммитится).
+
+### Повседневная синхронизация (без VPN)
+
+```powershell
 python scripts/sync_delivery_reference.py
 ```
 
-Либо кнопка **Delivery** на HR-дашборде (`POST /api/admin/sync-delivery`).
+Либо кнопка **Delivery** на HR-дашборде — пересобирает справочник из **локального зеркала**.
 
-### Автоматическая синхронизация
+### Автоматическая синхронизация backend
 
-При запуске backend с заданным `DELIVERY_SAPIENS_DB_PASSWORD` и `DELIVERY_SYNC_INTERVAL_HOURS > 0` (по умолчанию **24**):
-
-1. Синхронизация выполняется **сразу после старта** сервера
-2. Затем **каждые N часов** по расписанию
-
-Логи в консоли backend: `delivery sync ok: ...` или `delivery sync error: ...`.
-
-Чтобы отключить расписание и синхронизировать только вручную:
+При `DELIVERY_SYNC_INTERVAL_HOURS > 0` (по умолчанию **24**) backend периодически запускает `sync_delivery_reference.py` **из зеркала**. PostgreSQL не используется. Если зеркала нет — sync пропускается (см. лог).
 
 ```powershell
-$env:DELIVERY_SYNC_INTERVAL_HOURS = "0"
+$env:DELIVERY_SYNC_INTERVAL_HOURS = "0"   # только вручную / кнопка
 ```
 
 ### Охват опроса
 
-На дашборде KPI **«Охват (Delivery штат)»** = участники опроса / число **активных** сотрудников в текущем квартале (`mandays > 0` в data mart). Справочники в форме считаются по тем же активным людям (`COUNT(DISTINCT email)`).
+На дашборде KPI **«Охват (штат компании)»** = участники опроса / **актуальный штат компании** на дату синхронизации Delivery (`ods.v_employee`: последняя запись по человеку, открытый период `date_to ≥ сегодня`, не уволен). Справочники в форме и знаменатели срезов считаются по тому же составу.
+
+Отдельно в блоке «Контекст Delivery» показывается **Delivery-активность (квартал)** — люди с `mandays > 0` в data mart (для сравнения, не для знаменателя опроса).
 
 ### Справочник оргструктуры (1:1 с Delivery)
 
-Скрипт `sync_delivery_reference.py` загружает справочник из `ods.employee` и data mart:
+Скрипт `sync_delivery_reference.py` загружает справочник из `ods.v_employee` + `ods.employee`:
 
 | Поле в опросе | Источник Delivery | Примечание |
 |---------------|-------------------|------------|
-| Направление | `employee_direction` | активные в текущем квартале |
+| Направление | `employee_direction` | актуальный штат компании |
 | Должность | `position` | **каскад:** только должности выбранного направления + «Другая должность» |
 | Грейд | `grade` | **каскад** по направлению, коды как в Delivery (K1, DE3, …) |
-| Тип занятости | `employee_type` | активные в квартале |
+| Тип занятости | `employee_type` | актуальный штат |
 | Стаж | `date_from` | три корзины: &lt;1 год, 1–3 года, 3+ лет |
 
 В форме опроса **нет чисел в скобках** — только подписи. Сначала выбирается направление, затем сужаются списки должности и грейда (матрица `direction × position/grade` в `delivery_org_option_scopes`).
@@ -171,37 +181,17 @@ $env:DELIVERY_SYNC_INTERVAL_HOURS = "0"
 
 ### Ручной перенос справочника Delivery (pilot)
 
-Если VPS **не видит** PostgreSQL Delivery (`<delivery-host>`), справочник загружается **офлайн** с машины в VPN. Кнопка **Delivery** на дашборде остаётся (решение по ней — позже); авто-sync на сервере отключён (`DELIVERY_SYNC_INTERVAL_HOURS=0`).
+Если VPS **не видит** PostgreSQL Delivery, справочник обновляется **офлайн** с машины в VPN. На сервере backend читает локальное зеркало; авто-sync из зеркала на VPS обычно отключён (`DELIVERY_SYNC_INTERVAL_HOURS=0`).
 
-**На машине с доступом к Delivery:**
-
-```powershell
-pip install psycopg2-binary
-$env:DB_PATH = "C:\Work\gallup_q14\backend\data\gallup-q14.db"
-python scripts/sync_delivery_reference.py
-python scripts/export_delivery_reference_sql.py
-```
-
-Получится `scripts/delivery_reference_seed.sql` (таблицы `delivery_org_options`, `delivery_context_stats`, `delivery_sync_meta`).
-
-**На interxion:**
+**На машине с VPN** (раз в месяц или после изменений в Delivery):
 
 ```powershell
-$hostkey = "<vps-ssh-hostkey-fingerprint>"
-$pass = $env:VPS_SSH_PASSWORD
-
-pscp -batch -hostkey $hostkey -pw $pass `
-  scripts/delivery_reference_seed.sql root@<vps-host>:/opt/gallup-q14/scripts/
-pscp -batch -hostkey $hostkey -pw $pass `
-  scripts/apply_delivery_reference.sh root@<vps-host>:/opt/gallup-q14/scripts/
-
-plink -batch -hostkey $hostkey -pw $pass root@<vps-host> `
-  "bash /opt/gallup-q14/scripts/apply_delivery_reference.sh /opt/gallup-q14/scripts/delivery_reference_seed.sql"
+powershell -File scripts/delivery-monthly-sync.ps1
 ```
 
-Скрипт делает backup БД, останавливает `gallup-q14`, применяет SQL, запускает сервис. Ответы опроса не затрагиваются.
+Скрипт: pull → локальное зеркало → sync app DB → export seed → **upload `delivery_mirror.db` на VPS** → sync на сервере. Параметры SSH — user env `INTERXION_SWI_*` (см. внутренний runbook деплоя).
 
-**Снимок на 06.07.2026:** полный справочник из Delivery.
+Аварийный fallback без зеркала: `export_delivery_reference_sql.py` + `apply_delivery_reference.sh` на VPS (см. `scripts/apply_delivery_reference.sh`).
 
 > Pilot: self-signed TLS на `:8443` — при первом входе браузер покажет предупреждение (см. [docs/06-admin-guide.md](docs/06-admin-guide.md)).
 
@@ -221,7 +211,7 @@ gallup_q14/
 
 | Документ | Описание |
 |----------|----------|
-| [docs/02-setup.md](docs/02-setup.md) | Установка и запуск |
+| [docs/02-setup.md](docs/02-setup.md) | Установка, локальное зеркало Delivery, DBeaver |
 | [docs/06-admin-guide.md](docs/06-admin-guide.md) | Руководство HR и администратора |
 
 ## Лицензия

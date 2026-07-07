@@ -63,7 +63,7 @@ func TestBuildDashboard_engagementAndEnps(t *testing.T) {
 		CurrentRoundCode:        "2026-Q2",
 		CurrentRoundSubmissions: 2,
 		SubmissionCountsByRound: map[string]int{"2026-Q2": 2, "2026-Q1": 1},
-		DeliveryMeta:            &models.DeliverySyncMeta{StaffTotal: 100, ActiveDeliveryQTD: 100},
+		DeliveryMeta:            &models.DeliverySyncMeta{StaffTotal: 100, ActiveDeliveryQTD: 50},
 	})
 
 	assertFloat(t, out.EngagementScore, 50) // 2 favorable of 4 engagement answers (Q2 + Q1)

@@ -1,38 +1,19 @@
 #!/usr/bin/env python3
-"""Sync Delivery Sapiens reference data into gallup-q14 SQLite (no PII stored).
+"""Apply Delivery reference data from the local mirror into gallup-q14 SQLite.
 
-Org options mirror ods.employee structure with active-in-quarter counts (distinct email,
-mandays > 0 in current quarter). Position and grade lists cascade by employee_direction
-via delivery_org_option_scopes.
+Reads backend/data/delivery_mirror.db (offline copy). To refresh the mirror from
+PostgreSQL (VPN), run pull_delivery_mirror.py — typically once a month.
 """
 from __future__ import annotations
 
-import os
 import sqlite3
 import sys
 from datetime import date, datetime
 from pathlib import Path
 
-try:
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
-except ImportError:
-    print("Install psycopg2-binary: pip install psycopg2-binary", file=sys.stderr)
-    raise SystemExit(1)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-
-def env(name: str, default: str = "") -> str:
-    val = os.environ.get(name)
-    if val:
-        return val
-    try:
-        import winreg
-
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
-            val, _ = winreg.QueryValueEx(key, name)
-            return val
-    except OSError:
-        return default
+from delivery_mirror import mirror_age_days, mirror_meta, resolve_app_db_path, resolve_mirror_path
 
 
 def direction_label(value: str) -> str:
@@ -81,109 +62,140 @@ def employee_type_label(value: str) -> str:
     return labels.get(value, value)
 
 
-def fetch_pg_rows(conn) -> dict:
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    months = quarter_months()
-    months_sql = ", ".join(f"'{m}'" for m in months)
-
-    active_from = f"""
-        WITH active_emails AS (
-            SELECT DISTINCT lower(email) AS email
-            FROM vdm_query.v_data_mart_without_total
-            WHERE calmonth IN ({months_sql}) AND mandays::numeric > 0
+def active_company_cte() -> str:
+    """Current employees from local mirror (SQLite window functions)."""
+    return """
+        WITH ranked_v AS (
+            SELECT lower(email) AS email,
+                   date_to,
+                   dismissal,
+                   date_from,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY lower(email) ORDER BY date_from DESC
+                   ) AS rn
+            FROM mirror_v_employee
+        ),
+        latest_v AS (
+            SELECT email, date_to, dismissal
+            FROM ranked_v
+            WHERE rn = 1
+        ),
+        active_emails AS (
+            SELECT email
+            FROM latest_v
+            WHERE date(date_to) >= date('now')
+              AND lower(COALESCE(NULLIF(TRIM(dismissal), ''), 'false')) NOT IN ('true', '1')
+        ),
+        ranked_e AS (
+            SELECT lower(e.email) AS email,
+                   e.employee_direction,
+                   e.position,
+                   TRIM(e.grade) AS grade,
+                   e.employee_type,
+                   e.date_from,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY lower(e.email) ORDER BY e.date_from DESC
+                   ) AS rn
+            FROM mirror_employee e
+            INNER JOIN active_emails a ON lower(e.email) = a.email
+        ),
+        latest_e AS (
+            SELECT email, employee_direction, position, grade, employee_type, date_from
+            FROM ranked_e
+            WHERE rn = 1
         )
     """
 
-    def active_count(sql_body: str) -> list:
-        cur.execute(active_from + sql_body)
-        return cur.fetchall()
 
-    directions = active_count(
+def fetch_mirror_rows(conn: sqlite3.Connection) -> dict:
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    months = quarter_months()
+    months_sql = ", ".join(f"'{m}'" for m in months)
+    company_from = active_company_cte()
+
+    def company_count(sql_body: str) -> list:
+        cur.execute(company_from + sql_body)
+        return [dict(row) for row in cur.fetchall()]
+
+    directions = company_count(
         """
-        SELECT e.employee_direction AS value, COUNT(DISTINCT e.email) AS cnt
-        FROM ods.employee e
-        INNER JOIN active_emails a ON lower(e.email) = a.email
-        WHERE e.employee_direction IS NOT NULL AND TRIM(e.employee_direction) <> ''
+        SELECT employee_direction AS value, COUNT(DISTINCT email) AS cnt
+        FROM latest_e
+        WHERE employee_direction IS NOT NULL AND TRIM(employee_direction) <> ''
         GROUP BY 1 ORDER BY 2 DESC
         """
     )
 
-    positions = active_count(
+    positions = company_count(
         """
-        SELECT e.position AS value, COUNT(DISTINCT e.email) AS cnt
-        FROM ods.employee e
-        INNER JOIN active_emails a ON lower(e.email) = a.email
-        WHERE e.position IS NOT NULL AND TRIM(e.position) <> ''
+        SELECT position AS value, COUNT(DISTINCT email) AS cnt
+        FROM latest_e
+        WHERE position IS NOT NULL AND TRIM(position) <> ''
         GROUP BY 1 ORDER BY 2 DESC, 1 ASC
         """
     )
 
-    grades = active_count(
+    grades = company_count(
         """
-        SELECT TRIM(e.grade) AS value, COUNT(DISTINCT e.email) AS cnt
-        FROM ods.employee e
-        INNER JOIN active_emails a ON lower(e.email) = a.email
-        WHERE e.grade IS NOT NULL AND TRIM(e.grade) <> '' AND TRIM(e.grade) <> '-'
+        SELECT grade AS value, COUNT(DISTINCT email) AS cnt
+        FROM latest_e
+        WHERE grade IS NOT NULL AND TRIM(grade) <> '' AND grade <> '-'
         GROUP BY 1 ORDER BY 2 DESC, 1 ASC
         """
     )
 
-    employee_types = active_count(
+    employee_types = company_count(
         """
-        SELECT e.employee_type AS value, COUNT(DISTINCT e.email) AS cnt
-        FROM ods.employee e
-        INNER JOIN active_emails a ON lower(e.email) = a.email
-        WHERE e.employee_type IS NOT NULL AND TRIM(e.employee_type) <> ''
+        SELECT employee_type AS value, COUNT(DISTINCT email) AS cnt
+        FROM latest_e
+        WHERE employee_type IS NOT NULL AND TRIM(employee_type) <> ''
         GROUP BY 1 ORDER BY 2 DESC
         """
     )
 
-    position_by_direction = active_count(
+    position_by_direction = company_count(
         """
-        SELECT e.employee_direction AS scope_value, e.position AS option_value,
-               COUNT(DISTINCT e.email) AS cnt
-        FROM ods.employee e
-        INNER JOIN active_emails a ON lower(e.email) = a.email
-        WHERE e.employee_direction IS NOT NULL AND TRIM(e.employee_direction) <> ''
-          AND e.position IS NOT NULL AND TRIM(e.position) <> ''
+        SELECT employee_direction AS scope_value, position AS option_value,
+               COUNT(DISTINCT email) AS cnt
+        FROM latest_e
+        WHERE employee_direction IS NOT NULL AND TRIM(employee_direction) <> ''
+          AND position IS NOT NULL AND TRIM(position) <> ''
         GROUP BY 1, 2 ORDER BY 1, 3 DESC, 2 ASC
         """
     )
 
-    grade_by_direction = active_count(
+    grade_by_direction = company_count(
         """
-        SELECT e.employee_direction AS scope_value, TRIM(e.grade) AS option_value,
-               COUNT(DISTINCT e.email) AS cnt
-        FROM ods.employee e
-        INNER JOIN active_emails a ON lower(e.email) = a.email
-        WHERE e.employee_direction IS NOT NULL AND TRIM(e.employee_direction) <> ''
-          AND e.grade IS NOT NULL AND TRIM(e.grade) <> '' AND TRIM(e.grade) <> '-'
+        SELECT employee_direction AS scope_value, grade AS option_value,
+               COUNT(DISTINCT email) AS cnt
+        FROM latest_e
+        WHERE employee_direction IS NOT NULL AND TRIM(employee_direction) <> ''
+          AND grade IS NOT NULL AND TRIM(grade) <> '' AND grade <> '-'
         GROUP BY 1, 2 ORDER BY 1, 3 DESC, 2 ASC
         """
     )
 
     tenure_counts: dict[str, int] = {}
     cur.execute(
-        f"""
-        {active_from}
-        SELECT e.date_from
-        FROM ods.employee e
-        INNER JOIN active_emails a ON lower(e.email) = a.email
+        company_from
+        + """
+        SELECT date_from FROM latest_e
         """
     )
     for row in cur.fetchall():
-        tb = tenure_band(row["date_from"])
+        tb = tenure_band(date.fromisoformat(row["date_from"]) if row["date_from"] else None)
         if tb:
             tenure_counts[tb] = tenure_counts.get(tb, 0) + 1
 
-    cur.execute("SELECT COUNT(DISTINCT email) AS cnt FROM ods.employee")
+    cur.execute(company_from + "SELECT COUNT(DISTINCT email) AS cnt FROM latest_e")
     staff_total = cur.fetchone()["cnt"]
 
     cur.execute(
         f"""
         SELECT COUNT(DISTINCT email) AS cnt
-        FROM vdm_query.v_data_mart_without_total
-        WHERE calmonth IN ({months_sql}) AND mandays::numeric > 0
+        FROM mirror_data_mart
+        WHERE calmonth IN ({months_sql}) AND mandays > 0
         """
     )
     active_delivery = cur.fetchone()["cnt"]
@@ -191,8 +203,8 @@ def fetch_pg_rows(conn) -> dict:
     cur.execute(
         f"""
         WITH q AS (
-          SELECT email, SUM(mandays::numeric) AS mandays_q
-          FROM vdm_query.v_data_mart_without_total
+          SELECT email, SUM(mandays) AS mandays_q
+          FROM mirror_data_mart
           WHERE calmonth IN ({months_sql})
           GROUP BY 1
         )
@@ -206,14 +218,13 @@ def fetch_pg_rows(conn) -> dict:
         FROM q GROUP BY 1 ORDER BY 1
         """
     )
-    load_bands = cur.fetchall()
+    load_bands = [dict(row) for row in cur.fetchall()]
 
-    direction_headcount = active_count(
+    direction_headcount = company_count(
         """
-        SELECT e.employee_direction AS direction, COUNT(DISTINCT e.email) AS people
-        FROM ods.employee e
-        INNER JOIN active_emails a ON lower(e.email) = a.email
-        WHERE e.employee_direction IS NOT NULL AND TRIM(e.employee_direction) <> ''
+        SELECT employee_direction AS direction, COUNT(DISTINCT email) AS people
+        FROM latest_e
+        WHERE employee_direction IS NOT NULL AND TRIM(employee_direction) <> ''
         GROUP BY 1 ORDER BY 2 DESC
         """
     )
@@ -379,38 +390,33 @@ def write_sqlite(db_path: Path, data: dict) -> None:
 
 
 def main() -> int:
-    password = env("DELIVERY_SAPIENS_DB_PASSWORD")
-    if not password:
-        print("DELIVERY_SAPIENS_DB_PASSWORD is not set", file=sys.stderr)
+    mirror_path = resolve_mirror_path()
+    if not mirror_path.exists():
+        print(
+            f"Delivery mirror not found: {mirror_path}\n"
+            "Run pull_delivery_mirror.py once (with VPN) to create the local copy.",
+            file=sys.stderr,
+        )
         return 1
 
-    db_path = Path(env("DB_PATH", "./data/gallup-q14.db"))
-    if not db_path.is_absolute():
-        repo_root = Path(__file__).resolve().parents[1]
-        candidates = [
-            repo_root / db_path,
-            repo_root / "backend" / db_path,
-            repo_root / "backend" / "data" / "gallup-q14.db",
-        ]
-        db_path = next((p for p in candidates if p.exists()), candidates[0])
+    mirror_conn = sqlite3.connect(f"file:{mirror_path}?mode=ro", uri=True)
+    age = mirror_age_days(mirror_conn)
+    meta = mirror_meta(mirror_conn)
+    if age is not None and age > 35:
+        print(
+            f"Warning: mirror is {age:.0f} days old (pulled {meta['pulled_at']}). "
+            "Run pull_delivery_mirror.py when VPN is available.",
+            file=sys.stderr,
+        )
 
-    host = env("DELIVERY_SAPIENS_DB_HOST")
-    user = env("DELIVERY_SAPIENS_DB_USER")
-    if not host or not user:
-        print("DELIVERY_SAPIENS_DB_HOST and DELIVERY_SAPIENS_DB_USER are required", file=sys.stderr)
-        return 1
+    data = fetch_mirror_rows(mirror_conn)
+    mirror_conn.close()
 
-    pg = psycopg2.connect(
-        host=host,
-        port=int(env("DELIVERY_SAPIENS_DB_PORT", "5432")),
-        dbname=env("DELIVERY_SAPIENS_DB_NAME", "postgres"),
-        user=user,
-        password=password,
-        connect_timeout=20,
-    )
-    data = fetch_pg_rows(pg)
-    pg.close()
+    db_path = resolve_app_db_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     write_sqlite(db_path, data)
+    if meta:
+        print(f"Mirror source: {meta['source_host']}, pulled {meta['pulled_at']}")
     return 0
 
 

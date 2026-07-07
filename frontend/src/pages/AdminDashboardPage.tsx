@@ -200,7 +200,7 @@ export const AdminDashboardPage = () => {
                 <Percent className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-white/60 text-sm">Охват (Delivery штат)</p>
+                <p className="text-white/60 text-sm">Охват (штат компании)</p>
                 <p className="text-2xl font-bold text-white">
                   {data.responseRatePct.toFixed(1)}%
                   <span className="text-sm text-white/50 font-normal ml-1">

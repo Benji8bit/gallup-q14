@@ -36,7 +36,7 @@
 |----------|----------|
 | **Индекс вовлечённости** | % favorable (4–5) по Q01–Q12. Дельта — изменение vs предыдущий квартал |
 | **Участники** | Число уникальных отправок в текущем квартале |
-| **Охват (Delivery штат)** | Доля участников от числа **активных** сотрудников в текущем квартале (Delivery data mart) |
+| **Охват (штат компании)** | Доля участников от **актуального штата компании** на дату синхронизации Delivery (`v_employee` + `ods.employee`) |
 | **Удовлетворённость Q00** | Средний балл 1–5 |
 | **eNPS (E01)** | % промоутеров − % критиков; норма > +30 |
 
@@ -60,13 +60,26 @@
 
 ## Синхронизация Delivery
 
-Кнопка **Delivery** на дашборде запускает `scripts/sync_delivery_reference.py` и обновляет справочники в SQLite.
+Кнопка **Delivery** на дашборде пересобирает справочник из **локальной копии** (`backend/data/delivery_mirror.db`) — VPN не нужен.
 
-Справочник **повторяет структуру Delivery** (`ods.employee`): все направления, должности и грейды как в источнике. Грейды не сворачиваются в Junior/Middle/Senior — в форме и срезах те же коды, что в Delivery (K1, DE3 и т.д.). Стаж — единственное производное поле (три корзины из `date_from`).
+Обновление копии из PostgreSQL — **раз в месяц** (с VPN): `scripts/delivery-monthly-sync.ps1` или `pull_delivery_mirror.py`.
 
-После обновления скрипта синхронизации выполните sync повторно, чтобы подтянуть полный справочник.
+### DBeaver (просмотр данных без VPN)
 
-**Pilot interxion (без доступа к Delivery с VPS):** справочник переносится вручную с рабочей машины в VPN — см. [README — ручной перенос](../README.md#ручной-перенос-справочника-delivery-pilot).
+| Подключение | Файл |
+|-------------|------|
+| Delivery Mirror (Gallup Q14 local) | `backend/data/delivery_mirror.db` |
+| Gallup Q14 app (local) | `backend/data/gallup-q14.db` |
+
+Примеры SQL: `scripts/gallup_delivery_mirror_queries.sql`. Подробнее — [docs/02-setup.md — локальная копия Delivery](02-setup.md#локальная-копия-delivery-без-vpn).
+
+Справочник **повторяет структуру Delivery** (`ods.employee` / `ods.v_employee`): все направления, должности и грейды как в источнике. Грейды не сворачиваются в Junior/Middle/Senior — в форме и срезах те же коды, что в Delivery (K1, DE3 и т.д.). Стаж — единственное производное поле (три корзины из `date_from`).
+
+### Pilot interxion
+
+Зеркало Delivery: **`/opt/gallup-q14/data/delivery_mirror.db`** на VPS. Кнопка **Delivery** вызывает `sync_delivery_reference.py` локально на сервере.
+
+Обновление зеркала: `pull_delivery_mirror.py` на машине в VPN → `upload-mirror-to-vps.ps1` (или `delivery-monthly-sync.ps1`). Параметры VPS — переменные `INTERXION_SWI_*` (см. внутренний runbook деплоя).
 
 ## Экспорт CSV
 

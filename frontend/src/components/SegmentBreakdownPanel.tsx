@@ -25,8 +25,8 @@ export const SegmentBreakdownPanel = ({ segments }: Props) => {
     <div className="card mb-8">
       <h3 className="text-lg font-bold mb-2 uppercase tracking-wide">Срезы по группам (Delivery)</h3>
       <p className="text-sm text-ink-muted mb-6">
-        Вовлечённость по self-reported группам из справочника Delivery Sapiens. Показан охват: ответы / штат в
-        справочнике.
+        Вовлечённость по self-reported группам из справочника Delivery Sapiens. Показан охват: ответы /
+        актуальный штат компании.
       </p>
 
       <div className="space-y-8">

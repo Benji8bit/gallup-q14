@@ -1,7 +1,14 @@
 # Backend
 backend/data/
 backend/bin/
+
+# SQLite (app DB + Delivery mirror; mirror may contain email — never commit)
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
+backend/data/gallup-q14.db
+backend/data/delivery_mirror.db
 
 # Deploy staging / build artifacts
 dist/
@@ -33,6 +40,7 @@ docs/09-deployment-interxion.md
 Thumbs.db
 .idea/
 .vscode/
+.cursor/
 *.exe
 
 # Go

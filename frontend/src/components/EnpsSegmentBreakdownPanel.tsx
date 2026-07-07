@@ -30,6 +30,7 @@ export const EnpsSegmentBreakdownPanel = ({ segments }: Props) => {
       <h3 className="text-lg font-bold mb-2 uppercase tracking-wide">eNPS по группам (Delivery)</h3>
       <p className="text-sm text-ink-muted mb-6">
         Индекс eNPS в текущем квартале по self-reported группам из справочника Delivery. В подсказке — доли
+        промоутеров/нейтралов/критиков и охват ответов / актуальный штат компании.
         промоутеров, нейтралов и критиков.
       </p>
 

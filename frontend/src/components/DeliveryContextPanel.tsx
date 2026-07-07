@@ -39,11 +39,11 @@ export const DeliveryContextPanel = ({ stats, syncedAt, expectedRespondents, res
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <div className="rounded-md border border-line bg-page p-3">
-          <p className="text-xs text-ink-muted">Штат (справочник)</p>
+          <p className="text-xs text-ink-muted">Штат компании (актуальный)</p>
           <p className="text-xl font-bold text-navy">{staffTotal?.numericValue ?? expectedRespondents}</p>
         </div>
         <div className="rounded-md border border-line bg-page p-3">
-          <p className="text-xs text-ink-muted">Активны в delivery (квартал)</p>
+          <p className="text-xs text-ink-muted">Delivery-активность (квартал)</p>
           <p className="text-xl font-bold text-navy">{activeQtd?.numericValue ?? 0}</p>
         </div>
         <div className="rounded-md border border-line bg-page p-3">
