@@ -239,10 +239,8 @@ export async function submitSurvey(payload: {
   anonymousToken: string;
   answers: Record<string, number>;
   direction?: string;
-  positionGroup?: string;
   gradeBand?: string;
-  employeeType?: string;
-  tenure?: string;
+  role?: string;
 }): Promise<void> {
   const response = await fetch('/api/survey/submit', {
     method: 'POST',
@@ -328,11 +326,8 @@ export async function syncDeliveryReference(): Promise<string> {
 }
 
 export const SEGMENT_TYPE_LABELS: Record<string, string> = {
-  direction: 'Направление',
   grade_band: 'Грейд',
-  employee_type: 'Тип занятости',
-  position: 'Должность',
-  tenure_band: 'Стаж',
+  role: 'Роль',
 };
 
 export const DIMENSION_LABELS: Record<string, string> = {

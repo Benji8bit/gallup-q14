@@ -248,11 +248,11 @@ func (s *Store) SubmitSurvey(ctx context.Context, payload models.SubmitSurveyReq
 	}
 	defer tx.Rollback()
 
-	direction, positionGroup, gradeBand, employeeType, tenure := normalizeSubmissionMetadata(payload)
-	deptLegacy := direction
-	if deptLegacy == "" {
-		deptLegacy = strings.TrimSpace(payload.Department)
+	direction, role, gradeBand := normalizeSubmissionMetadata(payload)
+	if err := s.validateSurveyMetadata(ctx, role, gradeBand); err != nil {
+		return err
 	}
+	deptLegacy := direction
 
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO submissions (
@@ -262,11 +262,11 @@ func (s *Store) SubmitSurvey(ctx context.Context, payload models.SubmitSurveyReq
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, round.ID, token, s.clock().UTC().Format(time.RFC3339),
 		nullIfEmpty(deptLegacy),
-		nullIfEmpty(tenure),
+		nil,
 		nullIfEmpty(direction),
-		nullIfEmpty(positionGroup),
+		nullIfEmpty(role),
 		nullIfEmpty(gradeBand),
-		nullIfEmpty(employeeType),
+		nil,
 	)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {

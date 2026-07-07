@@ -52,6 +52,7 @@ type OrgOption struct {
 type SubmitSurveyRequest struct {
 	AnonymousToken string         `json:"anonymousToken"`
 	Answers        map[string]int `json:"answers"`
+	Role           string         `json:"role,omitempty"`
 	Department     string         `json:"department,omitempty"`
 	Tenure         string         `json:"tenure,omitempty"`
 	Direction      string         `json:"direction,omitempty"`

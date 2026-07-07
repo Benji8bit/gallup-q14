@@ -63,23 +63,16 @@ func (h *Handler) currentSurvey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgOptions, err := h.store.GetOrgOptions(r.Context())
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Не удалось получить справочники"})
-		return
-	}
-
-	scopes, err := h.store.GetOrgOptionScopes(r.Context())
+	orgOptions, err := h.store.GetSurveyOrgOptions(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Не удалось получить справочники"})
 		return
 	}
 
 	writeJSON(w, http.StatusOK, models.SurveyCurrentResponse{
-		Round:           round,
-		Questions:       questions,
-		OrgOptions:      orgOptions,
-		OrgOptionScopes: scopes,
+		Round:      round,
+		Questions:  questions,
+		OrgOptions: orgOptions,
 	})
 }
 
@@ -97,7 +90,7 @@ func (h *Handler) submitSurvey(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, store.ErrDuplicateSubmission):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "Вы уже отправляли опрос в этом квартале"})
 	case errors.Is(err, store.ErrInvalidPayload):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Ответы должны содержать все вопросы и значения 1..6"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Заполните обязательные поля «О вас» и ответьте на все 13 вопросов"})
 	default:
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Не удалось сохранить ответы"})
 	}
@@ -153,7 +146,7 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 
 	expectedBySegment := map[string]map[string]int{}
 	submissionBySegment := map[string]map[string]int{}
-	for _, segType := range []string{"direction", "position", "grade_band", "employee_type", "tenure_band"} {
+	for _, segType := range []string{"grade_band", "role"} {
 		expected, err := h.store.ExpectedCountsBySegment(r.Context(), segType)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Не удалось получить ожидаемые срезы"})

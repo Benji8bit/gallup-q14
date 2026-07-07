@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/sapiens-solutions/gallup-q14/internal/models"
@@ -190,6 +189,8 @@ func segmentColumn(segmentType string) (string, error) {
 	switch segmentType {
 	case "direction":
 		return "direction", nil
+	case "role":
+		return "position_group", nil
 	case "position":
 		return "position_group", nil
 	case "grade_band":
@@ -201,18 +202,6 @@ func segmentColumn(segmentType string) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown segment type: %s", segmentType)
 	}
-}
-
-func normalizeSubmissionMetadata(payload models.SubmitSurveyRequest) (direction, position, grade, empType, tenure string) {
-	direction = strings.TrimSpace(payload.Direction)
-	if direction == "" {
-		direction = strings.TrimSpace(payload.Department)
-	}
-	return direction,
-		strings.TrimSpace(payload.PositionGroup),
-		strings.TrimSpace(payload.GradeBand),
-		strings.TrimSpace(payload.EmployeeType),
-		strings.TrimSpace(payload.Tenure)
 }
 
 func deliverySyncedAtPtr(meta *models.DeliverySyncMeta) *time.Time {
