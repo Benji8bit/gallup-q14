@@ -51,7 +51,6 @@ func TestBuildDashboard_engagementAndEnps(t *testing.T) {
 		{RoundCode: "2026-Q2", Question: "q1", QuestionCode: "Q01", Dimension: "Basic Needs", QuestionRole: "engagement", Value: 5},
 		{RoundCode: "2026-Q2", Question: "q2", QuestionCode: "Q02", Dimension: "Basic Needs", QuestionRole: "engagement", Value: 4},
 		{RoundCode: "2026-Q2", Question: "q3", QuestionCode: "Q03", Dimension: "Basic Needs", QuestionRole: "engagement", Value: 2},
-		{RoundCode: "2026-Q2", Question: "q0", QuestionCode: "Q00", Dimension: "Satisfaction", QuestionRole: "satisfaction", Value: 4},
 		{RoundCode: "2026-Q2", Question: "e1", QuestionCode: "E01", Dimension: "eNPS", QuestionRole: "enps", Value: 10},
 		{RoundCode: "2026-Q2", Question: "e1b", QuestionCode: "E01", Dimension: "eNPS", QuestionRole: "enps", Value: 9},
 		{RoundCode: "2026-Q1", Question: "q1old", QuestionCode: "Q01", Dimension: "Basic Needs", QuestionRole: "engagement", Value: 3},
@@ -66,8 +65,10 @@ func TestBuildDashboard_engagementAndEnps(t *testing.T) {
 		DeliveryMeta:            &models.DeliverySyncMeta{StaffTotal: 100, ActiveDeliveryQTD: 50},
 	})
 
-	assertFloat(t, out.EngagementScore, 50) // 2 favorable of 4 engagement answers (Q2 + Q1)
-	assertFloat(t, out.SatisfactionScore, 4)
+	assertFloat(t, out.EngagementScore, 50)
+	if out.SatisfactionScore != 0 {
+		t.Fatalf("satisfaction = %v, want 0 without Q00", out.SatisfactionScore)
+	}
 	if out.EnpsScore == nil {
 		t.Fatal("expected eNPS score")
 	}

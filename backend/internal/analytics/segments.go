@@ -18,11 +18,8 @@ func buildSegmentBreakdown(input segmentInput) []models.SegmentScore {
 		Type  string
 		Value func(models.GroupedAnswerRecord) string
 	}{
-		{"direction", func(r models.GroupedAnswerRecord) string { return r.Direction }},
 		{"grade_band", func(r models.GroupedAnswerRecord) string { return r.GradeBand }},
-		{"employee_type", func(r models.GroupedAnswerRecord) string { return r.EmployeeType }},
-		{"position", func(r models.GroupedAnswerRecord) string { return r.PositionGroup }},
-		{"tenure_band", func(r models.GroupedAnswerRecord) string { return r.Tenure }},
+		{"role", func(r models.GroupedAnswerRecord) string { return r.PositionGroup }},
 	}
 
 	out := make([]models.SegmentScore, 0, 24)
@@ -81,11 +78,8 @@ func buildEnpsSegmentBreakdown(input segmentInput) []models.EnpsSegmentScore {
 		Type  string
 		Value func(models.GroupedAnswerRecord) string
 	}{
-		{"direction", func(r models.GroupedAnswerRecord) string { return r.Direction }},
 		{"grade_band", func(r models.GroupedAnswerRecord) string { return r.GradeBand }},
-		{"employee_type", func(r models.GroupedAnswerRecord) string { return r.EmployeeType }},
-		{"position", func(r models.GroupedAnswerRecord) string { return r.PositionGroup }},
-		{"tenure_band", func(r models.GroupedAnswerRecord) string { return r.Tenure }},
+		{"role", func(r models.GroupedAnswerRecord) string { return r.PositionGroup }},
 	}
 
 	out := make([]models.EnpsSegmentScore, 0, 24)

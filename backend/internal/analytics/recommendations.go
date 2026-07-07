@@ -82,23 +82,6 @@ func buildRecommendations(input recommendationInput) []models.RecommendationItem
 		})
 	}
 
-	if input.SatisfactionScore > 0 {
-		sat := input.SatisfactionScore
-		items = append(items, models.RecommendationItem{
-			ID:           "general-satisfaction",
-			Scope:        "general",
-			Title:        "Удовлетворённость компанией (Q00)",
-			Action:       "Проведите качественные интервью по мотивации удержания: что удерживает и что уводит из компании.",
-			TargetGroups: []string{"HR", "Генеральное руководство"},
-			Basis: fmt.Sprintf(
-				"Средняя удовлетворённость Q00 — %.1f/5. Показатель ниже 3.5 сигнализирует о системных проблемах опыта сотрудника.",
-				sat,
-			),
-			RelatedQuestions: []string{"Q00"},
-			Evidence:         models.RecommendationEvidence{SatisfactionScore: &sat},
-		})
-	}
-
 	topN := 3
 	if len(sortedDims) < topN {
 		topN = len(sortedDims)

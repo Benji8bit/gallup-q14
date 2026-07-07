@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Apply Delivery reference data from the local mirror into gallup-q14 SQLite.
 
-Reads backend/data/delivery_mirror.db (offline copy). To refresh the mirror from
-PostgreSQL (VPN), run pull_delivery_mirror.py — typically once a month.
+Survey uses only Data Engineering grades from the mirror; roles are fixed in code.
+Refresh mirror from PostgreSQL quarterly (or when grades change) — see README.
 """
 from __future__ import annotations
 
@@ -15,26 +15,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from delivery_mirror import mirror_age_days, mirror_meta, resolve_app_db_path, resolve_mirror_path
 
-
-def direction_label(value: str) -> str:
-    labels = {
-        "Data Engineering": "Data Engineering",
-        "Development": "Development",
-        "backoffice": "Backoffice",
-        "easy_report": "Easy Report",
-    }
-    return labels.get(value, value)
-
-
-def tenure_band(date_from: date | None) -> str:
-    if not date_from:
-        return ""
-    years = (date.today() - date_from).days / 365.25
-    if years < 1:
-        return "<1 год"
-    if years < 3:
-        return "1-3 года"
-    return "3+ лет"
+SURVEY_DIRECTION = "Data Engineering"
+SURVEY_ROLES = [
+    "Менеджер проекта",
+    "Тимлид",
+    "Инженер данных/Разработчик",
+]
 
 
 def quarter_code() -> str:
@@ -51,20 +37,13 @@ def quarter_months() -> list[str]:
 
 
 def employee_type_label(value: str) -> str:
-    labels = {
-        "staff": "Штат",
-        "outstaff": "Аутстафф",
-        "freelance(staff)": "Фриланс (штат)",
-        "freelance(outstaff)": "Фриланс (аутстафф)",
-        "backoffice": "Backoffice",
-        "easy_report": "Easy Report",
-    }
-    return labels.get(value, value)
+    _ = value
+    return value  # legacy import guard
 
 
 def active_company_cte() -> str:
-    """Current employees from local mirror (SQLite window functions)."""
-    return """
+    """Active Data Engineering employees from local mirror."""
+    return f"""
         WITH ranked_v AS (
             SELECT lower(email) AS email,
                    date_to,
@@ -89,10 +68,7 @@ def active_company_cte() -> str:
         ranked_e AS (
             SELECT lower(e.email) AS email,
                    e.employee_direction,
-                   e.position,
                    TRIM(e.grade) AS grade,
-                   e.employee_type,
-                   e.date_from,
                    ROW_NUMBER() OVER (
                        PARTITION BY lower(e.email) ORDER BY e.date_from DESC
                    ) AS rn
@@ -100,9 +76,10 @@ def active_company_cte() -> str:
             INNER JOIN active_emails a ON lower(e.email) = a.email
         ),
         latest_e AS (
-            SELECT email, employee_direction, position, grade, employee_type, date_from
+            SELECT email, employee_direction, grade
             FROM ranked_e
             WHERE rn = 1
+              AND employee_direction = '{SURVEY_DIRECTION}'
         )
     """
 
@@ -118,94 +95,37 @@ def fetch_mirror_rows(conn: sqlite3.Connection) -> dict:
         cur.execute(company_from + sql_body)
         return [dict(row) for row in cur.fetchall()]
 
-    directions = company_count(
-        """
-        SELECT employee_direction AS value, COUNT(DISTINCT email) AS cnt
-        FROM latest_e
-        WHERE employee_direction IS NOT NULL AND TRIM(employee_direction) <> ''
-        GROUP BY 1 ORDER BY 2 DESC
-        """
-    )
-
-    positions = company_count(
-        """
-        SELECT position AS value, COUNT(DISTINCT email) AS cnt
-        FROM latest_e
-        WHERE position IS NOT NULL AND TRIM(position) <> ''
-        GROUP BY 1 ORDER BY 2 DESC, 1 ASC
-        """
-    )
-
     grades = company_count(
         """
         SELECT grade AS value, COUNT(DISTINCT email) AS cnt
         FROM latest_e
         WHERE grade IS NOT NULL AND TRIM(grade) <> '' AND grade <> '-'
-        GROUP BY 1 ORDER BY 2 DESC, 1 ASC
+        GROUP BY 1 ORDER BY 1 ASC
         """
     )
-
-    employee_types = company_count(
-        """
-        SELECT employee_type AS value, COUNT(DISTINCT email) AS cnt
-        FROM latest_e
-        WHERE employee_type IS NOT NULL AND TRIM(employee_type) <> ''
-        GROUP BY 1 ORDER BY 2 DESC
-        """
-    )
-
-    position_by_direction = company_count(
-        """
-        SELECT employee_direction AS scope_value, position AS option_value,
-               COUNT(DISTINCT email) AS cnt
-        FROM latest_e
-        WHERE employee_direction IS NOT NULL AND TRIM(employee_direction) <> ''
-          AND position IS NOT NULL AND TRIM(position) <> ''
-        GROUP BY 1, 2 ORDER BY 1, 3 DESC, 2 ASC
-        """
-    )
-
-    grade_by_direction = company_count(
-        """
-        SELECT employee_direction AS scope_value, grade AS option_value,
-               COUNT(DISTINCT email) AS cnt
-        FROM latest_e
-        WHERE employee_direction IS NOT NULL AND TRIM(employee_direction) <> ''
-          AND grade IS NOT NULL AND TRIM(grade) <> '' AND grade <> '-'
-        GROUP BY 1, 2 ORDER BY 1, 3 DESC, 2 ASC
-        """
-    )
-
-    tenure_counts: dict[str, int] = {}
-    cur.execute(
-        company_from
-        + """
-        SELECT date_from FROM latest_e
-        """
-    )
-    for row in cur.fetchall():
-        tb = tenure_band(date.fromisoformat(row["date_from"]) if row["date_from"] else None)
-        if tb:
-            tenure_counts[tb] = tenure_counts.get(tb, 0) + 1
 
     cur.execute(company_from + "SELECT COUNT(DISTINCT email) AS cnt FROM latest_e")
     staff_total = cur.fetchone()["cnt"]
 
     cur.execute(
-        f"""
-        SELECT COUNT(DISTINCT email) AS cnt
-        FROM mirror_data_mart
-        WHERE calmonth IN ({months_sql}) AND mandays > 0
+        company_from
+        + f"""
+        SELECT COUNT(DISTINCT dm.email) AS cnt
+        FROM mirror_data_mart dm
+        INNER JOIN latest_e ON lower(dm.email) = latest_e.email
+        WHERE dm.calmonth IN ({months_sql}) AND dm.mandays > 0
         """
     )
     active_delivery = cur.fetchone()["cnt"]
 
     cur.execute(
-        f"""
-        WITH q AS (
-          SELECT email, SUM(mandays) AS mandays_q
-          FROM mirror_data_mart
-          WHERE calmonth IN ({months_sql})
+        company_from
+        + f"""
+        , mandays_q AS (
+          SELECT lower(dm.email) AS email, SUM(dm.mandays) AS mandays_q
+          FROM mirror_data_mart dm
+          INNER JOIN latest_e ON lower(dm.email) = latest_e.email
+          WHERE dm.calmonth IN ({months_sql})
           GROUP BY 1
         )
         SELECT CASE
@@ -215,32 +135,16 @@ def fetch_mirror_rows(conn: sqlite3.Connection) -> dict:
                  ELSE '81+'
                END AS band,
                COUNT(*) AS people
-        FROM q GROUP BY 1 ORDER BY 1
+        FROM mandays_q GROUP BY 1 ORDER BY 1
         """
     )
     load_bands = [dict(row) for row in cur.fetchall()]
 
-    direction_headcount = company_count(
-        """
-        SELECT employee_direction AS direction, COUNT(DISTINCT email) AS people
-        FROM latest_e
-        WHERE employee_direction IS NOT NULL AND TRIM(employee_direction) <> ''
-        GROUP BY 1 ORDER BY 2 DESC
-        """
-    )
-
     return {
-        "directions": directions,
-        "positions": positions,
         "grades": grades,
-        "employee_types": employee_types,
-        "position_by_direction": position_by_direction,
-        "grade_by_direction": grade_by_direction,
-        "tenure_counts": tenure_counts,
         "staff_total": staff_total,
         "active_delivery": active_delivery,
         "load_bands": load_bands,
-        "direction_headcount": direction_headcount,
     }
 
 
@@ -252,89 +156,30 @@ def write_sqlite(db_path: Path, data: dict) -> None:
     cur.execute("DELETE FROM delivery_org_option_scopes")
     cur.execute("DELETE FROM delivery_context_stats")
 
-    sort = 0
-    for row in data["directions"]:
-        sort += 1
-        value = row["value"]
-        cur.execute(
-            """
-            INSERT INTO delivery_org_options (option_type, option_value, label_ru, employee_count, sort_order)
-            VALUES ('direction', ?, ?, ?, ?)
-            """,
-            (value, direction_label(value), row["cnt"], sort),
-        )
-
-    sort = 0
-    for row in data["positions"]:
-        sort += 1
-        cur.execute(
-            """
-            INSERT INTO delivery_org_options (option_type, option_value, label_ru, employee_count, sort_order)
-            VALUES ('position', ?, ?, ?, ?)
-            """,
-            (row["value"], row["value"], row["cnt"], sort),
-        )
     cur.execute(
         """
         INSERT INTO delivery_org_options (option_type, option_value, label_ru, employee_count, sort_order)
-        VALUES ('position', 'Другое', 'Другая должность', 0, 999)
-        """
+        VALUES ('direction', ?, ?, ?, 1)
+        """,
+        (SURVEY_DIRECTION, SURVEY_DIRECTION, data["staff_total"]),
     )
 
-    sort = 0
-    for row in data["grades"]:
-        sort += 1
-        value = row["value"]
+    for idx, row in enumerate(data["grades"], start=1):
         cur.execute(
             """
             INSERT INTO delivery_org_options (option_type, option_value, label_ru, employee_count, sort_order)
             VALUES ('grade_band', ?, ?, ?, ?)
             """,
-            (value, value, row["cnt"], sort),
+            (row["value"], row["value"], row["cnt"], idx),
         )
 
-    tenure_order = ["<1 год", "1-3 года", "3+ лет"]
-    labels = {"<1 год": "Менее 1 года", "1-3 года": "1–3 года", "3+ лет": "3+ лет"}
-    for idx, band in enumerate(tenure_order, start=1):
-        cnt = data["tenure_counts"].get(band, 0)
+    for idx, role in enumerate(SURVEY_ROLES, start=1):
         cur.execute(
             """
             INSERT INTO delivery_org_options (option_type, option_value, label_ru, employee_count, sort_order)
-            VALUES ('tenure_band', ?, ?, ?, ?)
+            VALUES ('role', ?, ?, 0, ?)
             """,
-            (band, labels[band], cnt, idx),
-        )
-
-    sort = 0
-    for row in data["employee_types"]:
-        sort += 1
-        value = row["value"]
-        cur.execute(
-            """
-            INSERT INTO delivery_org_options (option_type, option_value, label_ru, employee_count, sort_order)
-            VALUES ('employee_type', ?, ?, ?, ?)
-            """,
-            (value, employee_type_label(value), row["cnt"], sort),
-        )
-
-    for row in data["position_by_direction"]:
-        cur.execute(
-            """
-            INSERT INTO delivery_org_option_scopes
-                (option_type, option_value, scope_type, scope_value, employee_count)
-            VALUES ('position', ?, 'direction', ?, ?)
-            """,
-            (row["option_value"], row["scope_value"], row["cnt"]),
-        )
-
-    for row in data["grade_by_direction"]:
-        cur.execute(
-            """
-            INSERT INTO delivery_org_option_scopes
-                (option_type, option_value, scope_type, scope_value, employee_count)
-            VALUES ('grade_band', ?, 'direction', ?, ?)
-            """,
-            (row["option_value"], row["scope_value"], row["cnt"]),
+            (role, role, idx),
         )
 
     for row in data["load_bands"]:
@@ -346,14 +191,13 @@ def write_sqlite(db_path: Path, data: dict) -> None:
             (row["band"], row["people"]),
         )
 
-    for row in data["direction_headcount"]:
-        cur.execute(
-            """
-            INSERT INTO delivery_context_stats (stat_key, stat_value, metric, numeric_value)
-            VALUES ('direction_headcount', ?, 'people', ?)
-            """,
-            (row["direction"], row["people"]),
-        )
+    cur.execute(
+        """
+        INSERT INTO delivery_context_stats (stat_key, stat_value, metric, numeric_value)
+        VALUES ('direction_headcount', ?, 'people', ?)
+        """,
+        (SURVEY_DIRECTION, data["staff_total"]),
+    )
 
     cur.execute(
         """
@@ -384,8 +228,8 @@ def write_sqlite(db_path: Path, data: dict) -> None:
     conn.commit()
     conn.close()
     print(
-        f"Synced Delivery reference: staff={data['staff_total']}, "
-        f"active_qtd={data['active_delivery']}, quarter={qcode}, db={db_path}"
+        f"Synced Delivery reference (DE only): staff={data['staff_total']}, "
+        f"grades={len(data['grades'])}, active_qtd={data['active_delivery']}, quarter={qcode}, db={db_path}"
     )
 
 
@@ -402,10 +246,10 @@ def main() -> int:
     mirror_conn = sqlite3.connect(f"file:{mirror_path}?mode=ro", uri=True)
     age = mirror_age_days(mirror_conn)
     meta = mirror_meta(mirror_conn)
-    if age is not None and age > 35:
+    if age is not None and age > 100:
         print(
             f"Warning: mirror is {age:.0f} days old (pulled {meta['pulled_at']}). "
-            "Run pull_delivery_mirror.py when VPN is available.",
+            "Run pull_delivery_mirror.py when VPN is available (typically quarterly).",
             file=sys.stderr,
         )
 

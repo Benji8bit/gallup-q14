@@ -20,7 +20,7 @@ export const LandingPage = () => {
           <p className="hero-subtitle">
             Ежеквартальный анонимный мониторинг для команды Sapiens Solutions.
             <br className="hidden sm:block" />
-            Gallup Q12 для DE-консалтинга (шкала 1–5) + быстрый индекс eNPS.
+            Gallup Q12 для Data Engineering (13 вопросов, шкала 1–5) + eNPS.
           </p>
           <div className="mt-8">
             <Link to="/survey" className="btn-hero">
@@ -51,7 +51,7 @@ export const LandingPage = () => {
               {
                 icon: BarChart3,
                 title: 'Методология Gallup',
-                desc: '12 вопросов вовлечённости по ТЗ руководства (DE-консалтинг) + eNPS 0–10.',
+                desc: '12 вопросов вовлечённости + eNPS. Опрос для направления Data Engineering.',
               },
               {
                 icon: Database,
@@ -82,9 +82,9 @@ export const LandingPage = () => {
           <h2 className="section-title">Структура опроса</h2>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { title: 'Q00', desc: 'Общая удовлетворённость компанией (шкала 1–5)' },
-              { title: 'Q01–Q12', desc: 'Адаптированный Gallup Q12: роль, признание, команда, развитие (1–5)' },
-              { title: 'E01 eNPS', desc: 'Готовность рекомендовать компанию: промоутеры, нейтралы, критики (0–10)' },
+              { title: 'E01 eNPS', desc: 'Готовность рекомендовать компанию (0–10) — первый вопрос' },
+              { title: 'Q01–Q12', desc: 'Gallup Q12: роль, признание, команда, развитие (1–5)' },
+              { title: 'О вас', desc: 'Обязательно: направление DE, грейд из Delivery, роль (PM / TL / инженер)' },
             ].map((item) => (
               <div key={item.title} className="card hover:border-brand/40 transition-colors">
                 <h3 className="text-brand font-bold text-lg mb-2 uppercase">{item.title}</h3>

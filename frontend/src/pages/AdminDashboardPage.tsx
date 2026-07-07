@@ -12,7 +12,7 @@ import {
   Bar,
   Cell,
 } from 'recharts';
-import { Users, TrendingUp, CheckCircle2, Download, Loader2, RefreshCw, Percent } from 'lucide-react';
+import { Users, TrendingUp, Download, Loader2, RefreshCw, Percent } from 'lucide-react';
 import { DeliveryContextPanel } from '../components/DeliveryContextPanel';
 import { DimensionRadarPanel } from '../components/DimensionRadarPanel';
 import { EnpsPanel } from '../components/EnpsPanel';
@@ -166,7 +166,7 @@ export const AdminDashboardPage = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <div className="dashboard-kpi flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-brand/30 flex items-center justify-center text-brand-hover">
                 <TrendingUp className="w-6 h-6" />
@@ -200,24 +200,12 @@ export const AdminDashboardPage = () => {
                 <Percent className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-white/60 text-sm">Охват (штат компании)</p>
+                <p className="text-white/60 text-sm">Охват (Data Engineering)</p>
                 <p className="text-2xl font-bold text-white">
                   {data.responseRatePct.toFixed(1)}%
                   <span className="text-sm text-white/50 font-normal ml-1">
                     / {data.expectedRespondents}
                   </span>
-                </p>
-              </div>
-            </div>
-            <div className="dashboard-kpi flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-brand/30 flex items-center justify-center text-brand-hover">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-white/60 text-sm">Удовлетворённость (Q00)</p>
-                <p className="text-2xl font-bold text-white">
-                  {data.satisfactionScore.toFixed(1)}{' '}
-                  <span className="text-sm text-white/50 font-normal">/ 5</span>
                 </p>
               </div>
             </div>

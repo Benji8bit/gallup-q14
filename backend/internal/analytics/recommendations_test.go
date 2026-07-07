@@ -28,9 +28,8 @@ func TestBuildRecommendations_empty(t *testing.T) {
 
 func TestBuildRecommendations_withData(t *testing.T) {
 	items := buildRecommendations(recommendationInput{
-		EngagementScore:   45,
-		SatisfactionScore: 3.2,
-		CurrentRoundCode:  "2026-Q2",
+		EngagementScore:  45,
+		CurrentRoundCode: "2026-Q2",
 		EnpsScore: &models.EnpsScore{
 			Score: 10, Total: 5,
 			PromotersPct: 40, PassivesPct: 30, DetractorsPct: 30,
@@ -52,20 +51,18 @@ func TestBuildRecommendations_withData(t *testing.T) {
 		t.Fatalf("first item = %s", items[0].ID)
 	}
 
-	var hasEnps, hasSat, hasWeakDim bool
+	var hasEnps, hasWeakDim bool
 	for _, item := range items {
 		switch item.ID {
 		case "general-enps":
 			hasEnps = true
-		case "general-satisfaction":
-			hasSat = true
 		}
 		if strings.HasPrefix(item.ID, "general-dim-") && strings.Contains(item.Title, "Роль и ресурсы") {
 			hasWeakDim = true
 		}
 	}
-	if !hasEnps || !hasSat {
-		t.Fatalf("missing general recs: enps=%v sat=%v", hasEnps, hasSat)
+	if !hasEnps {
+		t.Fatalf("missing general eNPS recommendation")
 	}
 	if !hasWeakDim {
 		t.Fatal("expected recommendation for weak Basic Needs dimension")

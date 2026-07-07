@@ -53,7 +53,7 @@ func BuildMethodologyGuide(questionTexts map[string]string, questionScores []mod
 
 	meta := questionMeta()
 	questions := make([]models.QuestionGuideItem, 0, len(questionTexts))
-	codes := []string{"Q00", "Q01", "Q02", "Q03", "Q04", "Q05", "Q06", "Q07", "Q08", "Q09", "Q10", "Q11", "Q12", "E01"}
+	codes := []string{"E01", "Q01", "Q02", "Q03", "Q04", "Q05", "Q06", "Q07", "Q08", "Q09", "Q10", "Q11", "Q12"}
 	for _, code := range codes {
 		text := questionTexts[code]
 		if text == "" {
@@ -85,21 +85,14 @@ func BuildMethodologyGuide(questionTexts map[string]string, questionScores []mod
 	}
 
 	return models.MethodologyGuide{
-		Overview: "Опрос вовлечённости Sapiens Solutions по ТЗ руководства (06.07.2026): адаптированный Gallup Q12 для data engineering консалтинга " +
-			"(Q01–Q12, шкала согласия 1–5) + Q00 (удовлетворённость) + E01 (eNPS 0–10). " +
-			"Индекс вовлечённости — доля благоприятных ответов (4–5) по Q01–Q12. eNPS рассчитывается отдельно.",
+		Overview: "Опрос вовлечённости Data Engineering Sapiens Solutions: Gallup Q12 (Q01–Q12, шкала 1–5) + eNPS (E01, 0–10). " +
+			"13 вопросов. Индекс вовлечённости — доля благоприятных ответов (4–5) по Q01–Q12. eNPS рассчитывается отдельно.",
 		Metrics: []models.MetricGuideItem{
 			{
 				Name:        "Индекс вовлечённости",
 				Description: "Доля ответов «благоприятно» (4–5) по Q01–Q12.",
 				Formula:     "favorable / все ответы Q01–Q12 × 100%",
 				Scale:       "0–100%",
-			},
-			{
-				Name:        "Удовлетворённость (Q00)",
-				Description: "Средняя оценка удовлетворённости компанией; отдельный показатель.",
-				Formula:     "среднее(Q00) на шкале 1–5",
-				Scale:       "1–5",
 			},
 			{
 				Name:        "eNPS (E01)",
@@ -116,25 +109,21 @@ func BuildMethodologyGuide(questionTexts map[string]string, questionScores []mod
 		},
 		Scales: []models.ScaleGuideSection{
 			{
-				Title:       "Q00 — удовлетворённость",
-				Description: "Шкала 1–5: от «крайне не удовлетворён» до «полностью удовлетворён».",
-			},
-			{
-				Title:       "Q01–Q12 — согласие (ТЗ руководства)",
-				Description: "Шкала 1–5: 1 — «совершенно не согласен», 5 — «полностью согласен». Благоприятный ответ: 4–5.",
-				Mapping: []models.ScaleMappingRow{
-					{SurveyValue: "1–2", DashboardValue: "1–2", Meaning: "Негативная зона"},
-					{SurveyValue: "3", DashboardValue: "3", Meaning: "Нейтральная зона"},
-					{SurveyValue: "4–5", DashboardValue: "4–5", Meaning: "Favorable — согласен / полностью согласен"},
-				},
-			},
-			{
 				Title:       "E01 — eNPS",
 				Description: "Шкала 0–10. Промоутеры 9–10, нейтралы 7–8, критики 0–6.",
 				Mapping: []models.ScaleMappingRow{
 					{SurveyValue: "0–6", DashboardValue: "Критики", Meaning: "Снижают eNPS"},
 					{SurveyValue: "7–8", DashboardValue: "Нейтралы", Meaning: "Не входят в формулу eNPS"},
 					{SurveyValue: "9–10", DashboardValue: "Промоутеры", Meaning: "Повышают eNPS"},
+				},
+			},
+			{
+				Title:       "Q01–Q12 — согласие",
+				Description: "Шкала 1–5: 1 — «совершенно не согласен», 5 — «полностью согласен». Благоприятный ответ: 4–5.",
+				Mapping: []models.ScaleMappingRow{
+					{SurveyValue: "1–2", DashboardValue: "1–2", Meaning: "Негативная зона"},
+					{SurveyValue: "3", DashboardValue: "3", Meaning: "Нейтральная зона"},
+					{SurveyValue: "4–5", DashboardValue: "4–5", Meaning: "Favorable — согласен / полностью согласен"},
 				},
 			},
 		},
