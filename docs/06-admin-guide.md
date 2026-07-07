@@ -60,9 +60,11 @@
 
 ## Синхронизация Delivery
 
-Кнопка **Delivery** на дашборде пересобирает справочник из **локальной копии** (`backend/data/delivery_mirror.db`) — VPN не нужен.
+**Dev:** кнопка **Delivery** пересобирает справочник из зеркала (`delivery_mirror.db`).
 
-Обновление копии из PostgreSQL — **раз в месяц** (с VPN): `scripts/delivery-monthly-sync.ps1` или `pull_delivery_mirror.py`.
+**VPS (pilot):** зеркала нет — кнопка **Delivery** переприменяет `delivery_reference_seed.sql` (агрегаты без PII). Свежие данные — monthly upload с машины в VPN.
+
+Обновление зеркала из PostgreSQL — **раз в месяц**: `scripts/delivery-monthly-sync.ps1`.
 
 ### DBeaver (просмотр данных без VPN)
 
@@ -75,11 +77,11 @@
 
 Справочник **повторяет структуру Delivery** (`ods.employee` / `ods.v_employee`): все направления, должности и грейды как в источнике. Грейды не сворачиваются в Junior/Middle/Senior — в форме и срезах те же коды, что в Delivery (K1, DE3 и т.д.). Стаж — единственное производное поле (три корзины из `date_from`).
 
-### Pilot interxion
+### Pilot (VPS)
 
-Зеркало Delivery: **`/opt/gallup-q14/data/delivery_mirror.db`** на VPS. Кнопка **Delivery** вызывает `sync_delivery_reference.py` локально на сервере.
+На сервере: **`/opt/gallup-q14/scripts/delivery_reference_seed.sql`** — только агрегаты. Зеркало с email **не хранится**.
 
-Обновление зеркала: `pull_delivery_mirror.py` на машине в VPN → `upload-mirror-to-vps.ps1` (или `delivery-monthly-sync.ps1`). Параметры VPS — переменные `INTERXION_SWI_*` (см. внутренний runbook деплоя).
+Обновление: `delivery-monthly-sync.ps1` на машине в VPN (pull зеркала → sync → export → `upload-reference-to-vps.ps1`).
 
 ## Экспорт CSV
 

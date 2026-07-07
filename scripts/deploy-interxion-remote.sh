@@ -22,22 +22,22 @@ rm -rf "$APP_ROOT/frontend/dist"
 mkdir -p "$APP_ROOT/frontend"
 cp -a "$SRC/frontend/dist" "$APP_ROOT/frontend/"
 
-# Scripts (Delivery mirror sync — runs locally on VPS)
+# Scripts (Delivery reference apply on VPS — aggregates only, no mirror)
 mkdir -p "$APP_ROOT/scripts"
-for f in delivery_mirror.py sync_delivery_reference.py pull_delivery_mirror.py \
-  export_delivery_reference_sql.py apply_delivery_reference.sh vps-sync-from-mirror.sh; do
+for f in apply_delivery_reference.sh; do
   if [[ -f "$SRC/scripts/$f" ]]; then
     cp "$SRC/scripts/$f" "$APP_ROOT/scripts/"
   fi
 done
 chmod +x "$APP_ROOT/scripts/"*.sh 2>/dev/null || true
+rm -f "$APP_ROOT/data/delivery_mirror.db"
 
 # Env
 cat > "$APP_ROOT/.env" <<EOF
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 PORT=8080
 DB_PATH=${APP_ROOT}/data/gallup-q14.db
-DELIVERY_MIRROR_PATH=${APP_ROOT}/data/delivery_mirror.db
+DELIVERY_REFERENCE_SEED_PATH=${APP_ROOT}/scripts/delivery_reference_seed.sql
 CORS_ORIGIN=https://${VPS_HOST}:8443
 DELIVERY_SYNC_INTERVAL_HOURS=0
 EOF

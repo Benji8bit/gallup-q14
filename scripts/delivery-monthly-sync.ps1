@@ -26,5 +26,5 @@ Write-Host '=== Export seed for VPS ==='
 python (Join-Path $PSScriptRoot 'export_delivery_reference_sql.py')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host '=== Upload mirror to VPS ==='
-powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'upload-mirror-to-vps.ps1')
+Write-Host '=== Upload reference seed to VPS ==='
+powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'upload-reference-to-vps.ps1')

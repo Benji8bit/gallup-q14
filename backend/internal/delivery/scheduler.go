@@ -11,7 +11,14 @@ func StartPeriodicSync(dbPath string, interval time.Duration, logger *log.Logger
 		return
 	}
 	if !MirrorAvailable() {
-		logger.Printf("delivery periodic sync disabled: local mirror not found (%s)", resolveMirrorPath())
+		if ReferenceSeedAvailable() {
+			logger.Printf(
+				"delivery periodic sync disabled: seed-only on VPS (%s); refresh via monthly upload",
+				resolveReferenceSeedPath(),
+			)
+		} else {
+			logger.Printf("delivery periodic sync disabled: no mirror or seed found")
+		}
 		return
 	}
 

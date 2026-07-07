@@ -153,7 +153,9 @@ $env:PORT = "8081"
 |------|------------|-------|
 | `backend/data/delivery_mirror.db` | Снимок `v_employee`, `employee`, data mart (квартал) | **нет** |
 | `backend/data/gallup-q14.db` | БД приложения (опрос, справочники, ответы) | **нет** |
-| `scripts/delivery_reference_seed.sql` | SQL для VPS после sync | **нет** |
+| `scripts/delivery_reference_seed.sql` | Агрегаты для VPS (после sync из зеркала) | **нет** |
+
+> **VPS:** хранит только seed + app DB — **без зеркала и email**. Зеркало остаётся на рабочей машине.
 
 ### Таблицы зеркала
 
@@ -171,11 +173,11 @@ $env:PORT = "8081"
 | Скрипт | VPN | Действие |
 |--------|-----|----------|
 | `pull_delivery_mirror.py` | **да** (рабочая машина) | PostgreSQL → локальный `delivery_mirror.db` |
-| `upload-mirror-to-vps.ps1` | нет | зеркало → VPS + sync на сервере |
-| `sync_delivery_reference.py` | нет | зеркало → `gallup-q14.db` (на той же машине) |
-| `vps-sync-from-mirror.sh` | нет | **на VPS:** зеркало → app DB |
-| `export_delivery_reference_sql.py` | нет | seed для VPS |
-| `delivery-monthly-sync.ps1` | да | pull + sync + export |
+| `sync_delivery_reference.py` | нет | зеркало → `gallup-q14.db` |
+| `export_delivery_reference_sql.py` | нет | app DB → `delivery_reference_seed.sql` |
+| `upload-reference-to-vps.ps1` | нет | seed → VPS + apply |
+| `apply_delivery_reference.sh` | нет | **на VPS:** seed → app DB |
+| `delivery-monthly-sync.ps1` | да | pull + sync + export + upload |
 | `register-delivery-monthly-task.ps1` | — | задача Windows (1-е число, 08:00) |
 
 ```powershell
@@ -213,7 +215,7 @@ python scripts/pull_delivery_mirror.py
 python scripts/sync_delivery_reference.py
 ```
 
-Без зеркала кнопка **Delivery** на дашборде и `sync_delivery_reference.py` завершатся ошибкой.
+Без зеркала (dev) `sync_delivery_reference.py` и кнопка **Delivery** завершатся ошибкой. На VPS вместо зеркала используется `delivery_reference_seed.sql`.
 
 ## Тесты backend
 
