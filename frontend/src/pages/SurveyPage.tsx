@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { Loader2 } from 'lucide-react';
-import { fetchCurrentSurvey, submitSurvey, type OrgOptionGroup, type OrgOptionScope, type Question } from '../lib/api';
+import { fetchCurrentSurvey, submitSurvey, formatRoundCode, type OrgOptionGroup, type OrgOptionScope, type Question } from '../lib/api';
 
 const METADATA_FIELD: Record<string, keyof SurveyMetadata> = {
   direction: 'direction',
@@ -273,9 +273,10 @@ export const SurveyPage = () => {
         <img src="/hero/bg2.png" alt="" className="hero-bg-dots opacity-60" aria-hidden="true" />
         <div className="hero-text-block !py-0 !pb-8 !pt-28">
           <p className="text-brand-hover text-xs font-bold uppercase tracking-widest mb-2">Sapiens Solutions</p>
-          <h1 className="hero-title !text-2xl sm:!text-3xl !max-w-none">
-            Опрос вовлечённости <span className="highlight-tag">{roundCode}</span>
-          </h1>
+          <h1 className="hero-title !text-2xl sm:!text-3xl !max-w-none">Опрос вовлечённости</h1>
+          {roundCode && (
+            <p className="hero-period">{formatRoundCode(roundCode).replace(' ', ' · ')}</p>
+          )}
           <p className="hero-subtitle !mt-3 !text-sm">
             Адаптированный Gallup Q12 для DE-консалтинга + eNPS. Ответы анонимны.
           </p>
